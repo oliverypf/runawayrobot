@@ -1,0 +1,216 @@
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class Main
+{
+    public static String post(String url, String param)
+    {
+        URL httpurl = null;
+        HttpURLConnection httpConn = null;
+        String line = "";
+        StringBuffer str = new StringBuffer();
+        try
+        {
+            httpurl = new URL(url);
+            httpConn = (HttpURLConnection) httpurl.openConnection();
+            httpConn.setRequestMethod("POST"); // 默认是post
+            httpConn.setDoOutput(true);
+            httpConn.setDoInput(true);
+            PrintWriter outs = new PrintWriter(httpConn.getOutputStream());
+            outs.print(param);
+            outs.flush();
+            outs.close();
+            BufferedReader in = new BufferedReader(new InputStreamReader(
+                    httpConn.getInputStream()));
+            while ((line = in.readLine()) != null)
+            {
+                str.append(line);
+            }
+            in.close();
+            
+        }
+        catch (Exception e)
+        {
+            return line;
+        }
+        finally
+        {
+            if (httpConn != null)
+                httpConn.disconnect();
+        }
+        return str.toString();
+    }
+    
+    public static void main(String args[])
+    {
+        String result = null;
+        List<Integer> indexs = null;
+        
+        List<Integer> doOnceindexs = null;
+        int level = 7;
+        int FVinsMax = 4;
+        int FVinsMin = 3;
+        SortedSet<String> allPathseq = generateAllPath(10);
+        for (String string : allPathseq)
+        {
+            System.out.println(string);
+        }
+        
+        SortedSet<String> curSeq = null;
+        while (true)
+        {
+            System.out.println(FVinsMin);
+            System.out.println(FVinsMax);
+            curSeq = getPath(FVinsMin, FVinsMax, allPathseq);
+            for (String str : curSeq)
+            {
+                result = post("http://www.hacker.org/runaway/index.php",
+                        "path="
+                                + str
+                                + "&name=oliverypf&spw=42b089bd296680fdf0f13e250a963ace");
+                System.out.println(str);
+                
+                if (result.indexOf("FlashVars=") >= 0)
+                {
+                    doOnceindexs = splitResult(result);
+                    
+                    System.out.println("成功了(" + level + ")：" + str);
+                    level = doOnceindexs.get(4);
+                    System.out.println("正在挑战第" + doOnceindexs.get(4)
+                            + "关，版图大小：" + doOnceindexs.get(2) + "乘"
+                            + doOnceindexs.get(3));
+                    
+                    FVinsMax = doOnceindexs.get(0);
+                    FVinsMin = doOnceindexs.get(1);
+                    
+                    break;
+                }
+                else
+                {
+                    System.out.println(result);
+                    
+                    if (result.startsWith("not in range"))
+                    {
+                        indexs = getIndexs(result);
+                        
+                        FVinsMax = indexs.get(1);
+                        FVinsMin = indexs.get(0);
+                        break;
+                    }
+                    else if (result.startsWith("boom at"))
+                    {
+                        //优化方案：根据boom位置，排除其他经过此boom位置的path
+                        //需要写算法，计算每个路径是否经过某个坐标
+                        
+                    }
+                }
+                
+            }
+            
+        }
+    }
+    
+    private static SortedSet<String> getPath(int min, int max,
+            SortedSet<String> allPathSeq)
+    {
+        Comparator comp = new Comparator<String>()
+        {
+            
+            @Override
+            public int compare(String o1, String o2)
+            {
+                if (o1.length() == o2.length())
+                {
+                    return o1.compareTo(o2);
+                }
+                return o2.length() - o1.length();
+            }
+            
+        };
+        SortedSet<String> pathSeq = new TreeSet<String>(comp);
+        
+        for (String str : allPathSeq)
+        {
+            if (str.length() >= min && str.length() <= max)
+            {
+                
+                pathSeq.add(str);
+            }
+        }
+        
+        return pathSeq;
+    }
+    
+    private static SortedSet<String> generateAllPath(int max)
+    {
+        
+        SortedSet<String> seq = new TreeSet<String>();
+        seq.add("D");
+        seq.add("R");
+        Iterator<String> it = null;
+        String str = null;
+        SortedSet<String> seqTemp = new TreeSet<String>();
+        for (int i = 1; i <= max; ++i)
+        {
+            seqTemp.addAll(seq);
+            it = seq.iterator();
+            while (it.hasNext())
+            {
+                str = it.next();
+                if (str.length() >= i && str.length() < max)
+                {
+                    seqTemp.add(str + "R");
+                    
+                    seqTemp.add(str + "D");
+                    
+                }
+            }
+            seq.addAll(seqTemp);
+        }
+        
+        return seq;
+    }
+    
+    private static List<Integer> splitResult(String result)
+    {
+        System.out.println(result);
+        int posStart = result.indexOf("FlashVars=");
+        int posMid = result.indexOf("FVlevel=", posStart);
+        int posEnd = result.indexOf("\"", posMid);
+        result = result.substring(posStart, posEnd);
+        System.out.println(result);
+        
+        List<Integer> indexs = getIndexs(result);
+        return indexs;
+    }
+    
+    private static List<Integer> getIndexs(String result)
+    {
+        Pattern pVinsMax = Pattern.compile("\\D*(\\d*)\\D*");
+        
+        Matcher m = pVinsMax.matcher(result);
+        List<Integer> indexs = new ArrayList<Integer>();
+        
+        String s = null;
+        while (m.find())
+        {
+            s = m.group(1);
+            if (!s.isEmpty())
+            {
+                indexs.add(Integer.valueOf(s));
+            }
+        }
+        return indexs;
+    }
+}
